@@ -13,8 +13,10 @@
 
 #include <math.h>
 
-#include "glad/glad.h" 
-#include "GLFW/glfw3.h" 
+#include <vector>
+
+#include <glad/glad.h>
+#include <GLFW/glfw3.h> 
 
 // includes, cuda
 #include <cuda_runtime.h>
@@ -24,6 +26,7 @@
 const unsigned int gWindowWidth = 512;
 const unsigned int gWindowHeight = 512;
 
+using namespace std;
 
 // glfw error callback
 void glfwErrorCallback(int error, const char* description)
@@ -79,7 +82,23 @@ void APIENTRY glDebugOutput(GLenum source,
 	std::cout << std::endl;
 }
 
+void keycallback(GLFWwindow *window, int key, int scancode,
+  int action, int mods)
+{
+  //Closes the Windows when Escape key is pressed.
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    glfwSetWindowShouldClose(window, GL_TRUE);
+}
 
+void mousecallback(GLFWwindow *window, int button, int action, int mods)
+{
+  if ((button == GLFW_MOUSE_BUTTON_LEFT) && (action == GLFW_PRESS))
+    std::cout << "Left Mouse button Pressed." << std::endl;
+  else if ((button == GLFW_MOUSE_BUTTON_RIGHT) && (action == GLFW_PRESS))
+    std::cout << "Right Mouse button Presssed ." << std::endl;
+  else if ((button == GLFW_MOUSE_BUTTON_MIDDLE) && (action == GLFW_PRESS))
+    std::cout << "Middle Mouse button Pressed." << std::endl;
+}
 
 
 // query GPU functionality we need for OpenGL, return false when not available
@@ -102,6 +121,66 @@ bool queryGPUCapabilitiesOpenGL()
 	// - maximum number of draw buffers
 	// =============================================================================
 
+  std::string version((const char *)glGetString(GL_VERSION));
+  std::stringstream stream(version);
+  unsigned major, minor;
+  char dot;
+
+  stream >> major >> dot >> minor;
+
+  std::cout << "OpenGL Version " << major << dot << minor << std::endl;
+
+  GLint no_extensions = 0;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &no_extensions);
+
+  std::vector<std::string> open_gl_extensions;
+
+  for (GLint index = 0; index < no_extensions; index++)
+  {
+    std::string extension((const char *)glGetStringi(GL_EXTENSIONS, index));
+    std::cout << "GL Exntension " << index << ": " << extension << std::endl;
+    open_gl_extensions.push_back(extension);
+  }
+
+  std::string vendor((const char *)glGetString(GL_VENDOR));
+  std::cout << "Vendor = " << vendor << std::endl;
+
+  std::string renderer((const char *)glGetString(GL_RENDERER));
+  std::cout << "Renderer Name = " << renderer << std::endl;
+
+  unsigned int gpu_extensions_supported = 0;
+  for (unsigned int index = 0; index < open_gl_extensions.size(); index++)
+  {
+    std::string extension = open_gl_extensions.at(index);
+    std::size_t found = extension.find("GL_NV");
+    if (found != std::string::npos)
+    {
+      gpu_extensions_supported++;
+    }
+  }
+
+
+  GLint result;
+  /* vertex shader attributes */
+  glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &result);
+  std::cout << "Maximum number of Vertex Shaders = " << result << std::endl;
+
+  /* Varying floats*/
+  glGetIntegerv(GL_MAX_VARYING_FLOATS, &result);
+  std::cout << "Maximum number of Varying Floats = " << result << std::endl;
+
+  /*texture image units */
+  glGetIntegerv(GL_MAX_TEXTURE_UNITS, &result);
+  std::cout << "Number of Texture Image Units = " << result << std::endl;
+
+  /*2D texture size*/
+  glGetIntegerv(GL_MAX_TEXTURE_SIZE, &result);
+  std::cout << "Maximum number of 2D Textures = " << result << std::endl;
+
+  /*number of draw buffers*/
+  glGetIntegerv(GL_MAX_DRAW_BUFFERS, &result);
+  std::cout << "Maximum number of Draw Buffers = " << result << std::endl;
+
 	return true;
 }
 
@@ -109,13 +188,13 @@ bool queryGPUCapabilitiesOpenGL()
 bool queryGPUCapabilitiesCUDA()
 {
 	// Device Count
-	int devCount;
+	int dev_count;
 
 	// Get the Device Count
-	cudaGetDeviceCount(&devCount);
+	cudaGetDeviceCount(&dev_count);
 	
 	// Print Device Count
-	printf("Device(s): %i\n", devCount);
+	printf("Device(s): %i\n", dev_count);
 	
 	// =============================================================================
 	//TODO:
@@ -134,7 +213,54 @@ bool queryGPUCapabilitiesCUDA()
 	//   - warp size (in threads)
 	//   - max threads per block
 	// =============================================================================
+  for (int counter = 0; counter < dev_count; counter++)
+  {
+    cudaSetDevice(counter);
+    cudaDeviceProp device_prop;
+    cudaGetDeviceProperties(&device_prop, counter);
 
+    std::cout << "Device Id = " << counter << ", Name = " << device_prop.name
+      << std::endl;
+
+    int driver_version;
+    cudaDriverGetVersion(&driver_version);
+    std::cout << "Device Id = " << counter << ", Driver Version = " <<
+      driver_version / 1000 << "." << (driver_version % 100) / 10
+      << std::endl;
+
+    int runtime_version;
+    cudaRuntimeGetVersion(&runtime_version);
+    std::cout << "Device Id = " << counter << ", Runtime Version = " <<
+      runtime_version / 1000 << "." << (runtime_version % 100) / 10
+      << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Capability Major rev. "
+      << "version = " << device_prop.major << ", Minor rev. version = "
+      << device_prop.minor << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Multiprocessors = " <<
+      device_prop.multiProcessorCount << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Clock Rate = " <<
+      device_prop.clockRate * 1e-3f << " MHz" << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Total Global Memory = " <<
+      static_cast<float>(device_prop.totalGlobalMem / 1048576.0f) <<
+      " MBytes" << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Shared Memory per block = " <<
+      device_prop.sharedMemPerBlock << " bytes" << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Number of Registers per "
+      "block = " << device_prop.regsPerBlock << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Wrap Size = "
+      << device_prop.warpSize << std::endl;
+
+    std::cout << "Device Id = " << counter << ", Maximum threads per block = "
+      << device_prop.maxThreadsPerBlock << std::endl;
+
+  }
 	return true;
 }
 
@@ -244,6 +370,10 @@ int main(int argc, char** argv)
 	//Implement mouse and keyboard callbacks!
 	//Print information about the events on std::cout
 	// =============================================================================
+
+  glfwSetKeyCallback(window, keycallback);
+
+  glfwSetMouseButtonCallback(window, mousecallback);
 
 	// make context current (once is sufficient)
 	glfwMakeContextCurrent(window);
